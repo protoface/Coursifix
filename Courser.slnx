@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Courser.Common/Courser.Common.csproj" />
+  <Project Path="Courser/Courser.csproj" />
+</Solution>
