@@ -1,4 +1,7 @@
 <Solution>
   <Project Path="Courser.Common/Courser.Common.csproj" />
   <Project Path="Courser/Courser.csproj" />
+  <Project Path="Spectre.Console.Ansi/Spectre.Console.Ansi.csproj" />
+  <Project Path="Spectre.Console.SourceGenerator/Spectre.Console.SourceGenerator.csproj" />
+  <Project Path="Spectre.Console/Spectre.Console.csproj" />
 </Solution>
