@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Eto.Forms" Version="2.12.0" />
+    <PackageReference Include="Eto.Forms" Version="2.13.0" />
     <PackageReference Include="Humanizer" Version="3.0.10" />
     <PackageReference Include="Humanizer.Core.de" Version="3.0.10" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.13" />
@@ -19,7 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Courser.Common\Courser.Common.csproj" />
 
-    <EmbeddedResource  Include="icon.ico" />
+    <EmbeddedResource Include="Icons\**" />
   </ItemGroup>
 
 </Project>
