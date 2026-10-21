@@ -13,7 +13,7 @@ internal class ConsoleWorker(ICalendarService calendarService) : IHostedService
     private Task? _runningWorker;
     private CancellationTokenSource? _cts;
     private uint _ticker = 0;
-    // private Lecture? _displayedLecture;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -57,18 +57,6 @@ internal class ConsoleWorker(ICalendarService calendarService) : IHostedService
         }
     }
 
-    // private async Task NewMethod()
-    // {
-    //     var response = await AnsiConsole.PromptAsync(new ConfirmationPrompt("") { DefaultValue = true, RequireEnter = true });
-    //     if (response && _displayedLecture != null)
-    //     {
-    //         var directory = Path.Combine(courseConfig.NotesRoot, _displayedLecture.Name, _displayedLecture.Start.LocalDateTime.ToString("dd.MM.yy"));
-    //         if(!Directory.Exists(directory)) Directory.CreateDirectory(directory);
-    //         var filePath = Path.Combine(directory, "notes.typ");
-    //         if(!File.Exists(filePath)) 
-    //     }
-    // }
-
     private async Task<Result<Panel>> GetLecturePanel()
     {
         switch (await calendarService.GetNextEndingLectureAsync())
@@ -79,7 +67,6 @@ internal class ConsoleWorker(ICalendarService calendarService) : IHostedService
                 return e;
             case Lecture lecture:
                 {
-                    // _displayedLecture = lecture;
                     var now = DateTimeOffset.UtcNow;
                     var isUpcoming = lecture.Start > now;
 

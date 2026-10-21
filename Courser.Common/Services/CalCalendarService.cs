@@ -10,24 +10,16 @@ namespace Courser.Common.Services;
 internal sealed class CalCalendarService(IOptions<CourseConfig> courseOptions) : ICalendarService
 {
     private CourseConfig CourseConfig => courseOptions.Value;
-    private Calendar? _calendarData;
+    private List<Lecture> _lectures = [];
     private long _lastCalendarUpdate;
 
-    public async Task<Result<Lecture?>> GetNextEndingLectureAsync()
+    public Task<Maybe<Lecture>> GetNextEndingLectureAsync()
     {
         var now = DateTime.UtcNow;
-        switch (await GetCalendarEvent(e => e.End?.AsUtc > now))
-        {
-            case null:
-                return Result<Lecture?>.Empty;
-            case Error e:
-                return e;
-            case CalendarEvent entry:
-                return ToLecture(entry);
-        }
+        return GetCalendarEvent(e => e.End > now);
     }
 
-    private static Lecture ToLecture(CalendarEvent entry) => new Lecture
+    private static Lecture ToLecture(CalendarEvent entry) => new()
     {
         Name = entry.Summary?.Trim() ?? "unnamed lecture",
         Start = entry.Start!.Value,
@@ -35,34 +27,46 @@ internal sealed class CalCalendarService(IOptions<CourseConfig> courseOptions) :
         Rooms = entry.Location ?? "No room assigned"
     };
 
-    async Task<Result<CalendarEvent?>> GetCalendarEvent(Func<CalendarEvent, bool> match)
+    async Task<Maybe<Lecture>> GetCalendarEvent(Func<Lecture, bool> match)
     {
         if (await UpdateCalendarDataAsync() is { } updateError) return updateError;
-        return _calendarData?.Events.FirstOrDefault(match);
+        return _lectures.FirstOrDefault(match);
     }
 
     async Task<Error?> UpdateCalendarDataAsync()
     {
         if (Stopwatch.GetElapsedTime(_lastCalendarUpdate) < CourseConfig.UpdateInterval) return null;
         using var client = new HttpClient();
-        
-        Stream? response;
-        try
-        {
 
-            response = await client.GetStreamAsync("https://dhbw.app/ical/" + CourseConfig.Course);
-            if (response is null) return new("failed to get calendar data");
-        }
-        catch (Exception ex)
+        switch (await GetICalStream())
         {
-            return new("failed to get calendar data", ex);
+            case Stream calStream:
+                var calData = Calendar.Load(calStream);
+                if (calData is null) return new("Parsing data failed");
+                _lectures = [.. calData.Events.Select(ToLecture)];
+                await calStream.DisposeAsync();
+                break;
+            case Error error:
+                return error;
         }
-
-        _calendarData = Calendar.Load(response);
-        if (_calendarData is null) return new("Parsing data failed");
 
         _lastCalendarUpdate = Stopwatch.GetTimestamp();
         return null;
+    }
+
+    async Task<Result<Stream>> GetICalStream()
+    {
+        try
+        {
+            using var client = new HttpClient();
+            var httpResponse = await client.GetAsync("https://dhbw.app/ical/" + CourseConfig.Course);
+            if (!httpResponse.IsSuccessStatusCode) return new Error("failed to get calendar data");
+            return await httpResponse.Content.ReadAsStreamAsync();
+        }
+        catch (Exception ex)
+        {
+            return new Error("failed to get calendar data", ex);
+        }
     }
 
 }

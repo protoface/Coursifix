@@ -4,13 +4,14 @@ using System.Runtime.CompilerServices;
 
 namespace Courser.Common.Models;
 
-public readonly union Result<T>(T, Error);
+public readonly union Result<T>(T, Error) where T : notnull;
+public readonly union Maybe<T>(T?, Error);
 
 static class ResultExtensions
 {
-    extension<T>(Result<T>) where T : class?
+    extension<T>(Maybe<T>)
     {
-        public static Result<T?> Empty => new((T?)null);
+        public static Maybe<T> Empty => default;
     }
 }
 

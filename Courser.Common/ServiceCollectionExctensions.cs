@@ -6,7 +6,7 @@ using Courser.Common.Models;
 
 namespace Courser.Common;
 
-public static class Extensions
+public static class ServiceCollectionExtensions
 {
 
     extension(IServiceCollection serviceCollection)

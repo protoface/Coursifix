@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "C#: Courser Debug",
+            "name": "C#: Courser UI Debug",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}/Courser/Courser.csproj"
+            "projectPath": "${workspaceFolder}/Courser.UI/Courser.UI.Wpf/Courser.UI.Wpf.csproj"
         }
     ]
 }
