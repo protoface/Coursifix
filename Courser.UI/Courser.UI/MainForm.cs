@@ -9,212 +9,203 @@ using Humanizer;
 using Microsoft.Extensions.Options;
 using System.IO;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http;
 using System.Reflection;
 using System.Linq;
+using Courser.UI.Utils;
 
 namespace Courser.UI;
 
-public sealed partial class MainForm : Form
+internal sealed class MainForm : Form<MainForm.MainViewModel>
 {
-	private ICalendarService CalendarService { get; }
-	private CourseConfig CourseConfig { get; }
-	private Task DataUpdateTask { get; }
-	private MainViewModel Model { get; }
+    private ICalendarService CalendarService { get; }
+    private CourseConfig CourseConfig { get; }
+    private Task DataUpdateTask { get; }
+    // private MainViewModel Model { get; }
 
-	private static readonly Icon[] LectureIcons = [.. Assembly.GetExecutingAssembly().GetManifestResourceNames()
-		.Where(e => e.StartsWith("Courser.UI.Icons.Lectures"))
-		.Order()
-		.Select(e => Icon.FromResource(e))];
-	private static readonly Icon ErrorIcon = Icon.FromResource("Courser.UI.Icons.icon-barrier.ico"), DiaIcon = Icon.FromResource("Courser.UI.Icons.icon-dia.ico");
+    public MainForm(ICalendarService calendarService, IOptions<CourseConfig> options)
+    {
+        CalendarService = calendarService;
+        CourseConfig = options.Value;
 
-	public MainForm(ICalendarService calendarService, IOptions<CourseConfig> options)
-	{
-		CalendarService = calendarService;
-		CourseConfig = options.Value;
+        // DataContext = Model = new();
+        Title = "Courser";
+        MinimumSize = new Size(250, 150);
 
-		DataContext = Model = new();
-		Title = "Courser";
-		MinimumSize = new Size(250, 150);
+        DynamicLayout layout = new() { Padding = new(10, 5, 10, 0) };
+        layout.Add(null);
+        layout.Add(new Label().Bind(this, e => e.TextBinding, m => m.CourseName));
+        layout.AddSeparateRow(xscale: true, controls:
+            [
+                new Label().Bind(this, e => e.TextBinding, m => m.FormattedTime),
+                null,
+                new Label().Bind(this, e => e.TextBinding, m => m.ElapsedPercent)
+            ]
+        );
+        layout.Add(new Label().Bind(this, e => e.TextBinding, m => m.Rooms));
+        layout.Add(null);
 
-		DynamicLayout layout = new() { Padding = new(10, 5, 10, 0) };
-		layout.Add(null);
-		layout.Add(new Label().Bind(e => e.TextBinding, (MainViewModel m) => m.CourseName));
-		layout.AddSeparateRow(xscale: true, controls:
-			[
-				new Label().Bind(e => e.TextBinding, (MainViewModel m) => m.FormattedTime),
-				null,
-				new Label().Bind(e => e.TextBinding, (MainViewModel m) => m.ElapsedPercent)
-			]
-		);
-		layout.Add(new Label().Bind(e => e.TextBinding, (MainViewModel m) => m.Rooms));
-		layout.Add(null);
+        Content = layout;
+        Icon = Icons.DiamondIcon;
 
-		Content = layout;
-		Icon = ErrorIcon;
+        var openInCode = new Command { ToolBarText = "Open in Code", Shortcut = Application.Instance.CommonModifier | Keys.O };
+        openInCode.Executed += async (_, _) =>
+        {
+            switch (await calendarService.GetNextEndingLectureAsync())
+            {
+                case Lecture lecture:
+                    {
+                        var lectureDirectory = Path.Combine(CourseConfig.NotesRoot, lecture.Name, DateTime.Today.ToString("dd.MM.yy"));
+                        if (!Directory.Exists(lectureDirectory)) Directory.CreateDirectory(lectureDirectory);
+                        var notesFile = Path.Combine(lectureDirectory, "notes.typ");
+                        if (File.Exists(notesFile))
+                            File.WriteAllText(notesFile, """
+                                                         #import "../../style.typ": style
+                                                         #show: style
 
-		var openInCode = new Command { ToolBarText = "Open in Code", Shortcut = Application.Instance.CommonModifier | Keys.O };
-		openInCode.Executed += async (_, _) =>
-		{
-			switch (await calendarService.GetNextEndingLectureAsync())
-			{
-				case Lecture lecture:
-					{
-						var lectureDirectory = Path.Combine(CourseConfig.NotesRoot, lecture.Name, DateTime.Today.ToString("dd.MM.yy"));
-						if (!Directory.Exists(lectureDirectory)) Directory.CreateDirectory(lectureDirectory);
-						var notesFile = Path.Combine(lectureDirectory, "notes.typ");
-						if (File.Exists(notesFile))
-							File.WriteAllText(notesFile, """
-							#import "../../style.typ": style
-							#show: style
-							
-							""");
-						Process.Start("code.exe", notesFile);
-						break;
-					}
-			}
-		};
+                                                         """);
+                        Process.Start("code.exe", notesFile);
+                        break;
+                    }
+            }
+        };
 
-		ToolBar = new()
-		{
-			Items =
-			{
-				new CheckToolItem { Text = "On Top", Style ="darker" }.Apply(e => e.CheckedChanged += (s, _) => Topmost = (s as CheckToolItem).Checked),
-			},
-		};
+        ToolBar = new()
+        {
+            Items =
+            {
+                new CheckToolItem { Text = "On Top", Style = "darker" }.Apply(e => e.CheckedChanged += (s, _) => Topmost = ((CheckToolItem)s)!.Checked),
+                new ButtonToolItem { Text = "Cal" }.Apply(e => e.Click += async (_, _) => await Services.GetService<CalendarForm>().ShowModalAsync(this))
+            },
+        };
 
-		if (CourseConfig is { WlanPassword: not null, WlanUserName: not null, LoginUri: not null })
-		{
-			ToolBar.Items.Add(new ButtonToolItem { Text = "Login" }.Apply(e => e.Click += async (_, _) => await LoginToNetwork()));
-		}
+        if (CourseConfig is { WlanPassword: not null, WlanUserName: not null, LoginUri: not null })
+        {
+            ToolBar.Items.Add(new ButtonToolItem { Text = "Login" }.Apply(e => e.Click += async (_, _) => await LoginToNetwork()));
+        }
 
-		DataUpdateTask = Task.Run(UpdateTask);
-	}
+        DataUpdateTask = Task.Run(UpdateTask);
+    }
 
 
 
-	async Task LoginToNetwork()
-	{
-		using var client = new HttpClient();
-		if (!(await client.GetAsync(CourseConfig.LoginUri)).IsSuccessStatusCode)
-		{
-			MessageBox.Show("Fetch of login page failed", MessageBoxButtons.OK, MessageBoxType.Error);
-			return;
-		}
-		var response = await client.PostAsync(CourseConfig.LoginUri, new FormUrlEncodedContent([
-			new("buttonClicked", "4" ),
-			new("redirect_url", CourseConfig.LoginRedirectUri.ToString() ),
-			new("err_flag", "0" ),
-			new("username", CourseConfig.WlanUserName ),
-			new("password", CourseConfig.WlanPassword)]));
+    async Task LoginToNetwork()
+    {
+        try
+        {
+            using var client = new HttpClient();
+            if (!(await client.GetAsync(CourseConfig.LoginUri)).IsSuccessStatusCode)
+            {
+                MessageBox.Show("Fetch of login page failed", MessageBoxButtons.OK, MessageBoxType.Error);
+                return;
+            }
+            var response = await client.PostAsync(CourseConfig.LoginUri, new FormUrlEncodedContent([
+                new("buttonClicked", "4"),
+                new("redirect_url", CourseConfig.LoginRedirectUri.ToString()),
+                new("err_flag", "0"),
+                new("username", CourseConfig.WlanUserName),
+                new("password", CourseConfig.WlanPassword)
+            ]));
 
-		if (response.IsSuccessStatusCode)
-			MessageBox.Show("Login returned OK", MessageBoxButtons.OK, MessageBoxType.Information);
-		else
-			MessageBox.Show($"Login failed: {response}", MessageBoxButtons.OK, MessageBoxType.Error);
-	}
+            if (response.IsSuccessStatusCode)
+                MessageBox.Show("Login returned OK", MessageBoxButtons.OK, MessageBoxType.Information);
+            else
+                MessageBox.Show($"Login failed: {response}", MessageBoxButtons.OK, MessageBoxType.Error);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.ToString(), MessageBoxButtons.OK, MessageBoxType.Error);
+        }
+    }
 
-	private async Task UpdateTask()
-	{
-		using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-		int ticker = 0;
-		do
-		{
-			switch (await CalendarService.GetNextEndingLectureAsync())
-			{
-				case Lecture lecture:
+    private async Task UpdateTask()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        int ticker = 0;
+        do
+        {
+            switch (await CalendarService.GetNextEndingLectureAsync())
+            {
+                case Lecture lecture:
 
-					var now = DateTimeOffset.UtcNow;
-					double elapsedLecturePercent = Math.Max((now - lecture.Start) / (lecture.End - lecture.Start), 0);
+                    var now = DateTimeOffset.UtcNow;
 
-					var (timeString, nameString) = elapsedLecturePercent > 0
-						? (ParseRunningLecture(lecture, now), lecture.Name)
-						: (ParseUpcomingLecture(lecture, now), $"Next: {lecture.Name}");
+                    string nameString, timeString;
+                    Icon icon;
+                    if ((now - lecture.Start) / (lecture.End - lecture.Start) is >= 0 and var elapsedLecturePercent)
+                    {
+                        nameString = lecture.Name;
+                        timeString = ParseRunningLecture(lecture, now);
+                        icon = lecture.Icon;
 
-					Application.Instance.AsyncInvoke(() =>
-					{
-						Model.CourseName = nameString;
-						Model.FormattedTime = timeString;
-						Model.Rooms = lecture.Rooms;
-						if (elapsedLecturePercent > 0)
-						{
-							Model.ElapsedPercent = $"{100 * elapsedLecturePercent:F2}%";
-							Taskbar.SetProgress(TaskbarProgressState.Progress, (float)elapsedLecturePercent);
-							Icon = GetLectureIcon(lecture.Name);
-						}
-						else
-						{
-							Model.ElapsedPercent = "";
-							Taskbar.SetProgress(TaskbarProgressState.None);
-							Icon = DiaIcon;
-						}
-					});
-					break;
-				case Error error:
-					Application.Instance.AsyncInvoke(() =>
-					{
-						Model.CourseName = error.Message;
-						Icon = ErrorIcon;
-					});
-					break;
-				case null:
-					Application.Instance.AsyncInvoke(() =>
-					{
-						Model.CourseName = "No lecture found";
-						Model.FormattedTime = "";
-						Model.ElapsedPercent = "";
-						Model.Rooms = "";
-						Taskbar.SetProgress(TaskbarProgressState.None);
-					});
-					break;
-			}
-			ticker++;
+                        await Utils.UI.InvokeAsync(() =>
+                        {
+                            Model.ElapsedPercent = $"{100 * elapsedLecturePercent:F2}%";
+                            Taskbar.SetProgress(TaskbarProgressState.Progress, (float)elapsedLecturePercent);
+                        });
+                    }
+                    else
+                    {
+                        nameString = $"Next: {lecture.Name}";
+                        timeString = ParseUpcomingLecture(lecture, now);
+                        icon = lecture.Start - now < TimeSpan.FromDays(7)
+                            ? lecture.Icon
+                            : Icons.DiamondIcon;
 
-		} while (await timer.WaitForNextTickAsync());
+                        await Utils.UI.InvokeAsync(() =>
+                        {
+                            Model.ElapsedPercent = "";
+                            Taskbar.SetProgress(TaskbarProgressState.None);
+                        });
+                    }
+
+                    await Utils.UI.InvokeAsync(() =>
+                    {
+                        Model.CourseName = nameString;
+                        Model.FormattedTime = timeString;
+                        Model.Rooms = lecture.Rooms;
+                        Icon = icon;
+                    });
+                    break;
+                case Error error:
+                    await Utils.UI.InvokeAsync(() =>
+                    {
+                        Model.CourseName = error.Message;
+                        Icon = Icons.ErrorIcon;
+                    });
+                    break;
+                case null:
+                    await Utils.UI.InvokeAsync(() =>
+                    {
+                        Model.CourseName = "No lecture found";
+                        Model.FormattedTime = "";
+                        Model.ElapsedPercent = "";
+                        Model.Rooms = "";
+                        Taskbar.SetProgress(TaskbarProgressState.None);
+                    });
+                    break;
+            }
+            ticker++;
+
+        } while (await timer.WaitForNextTickAsync());
+        return;
 
 
-		string ParseRunningLecture(Lecture lecture, DateTimeOffset compareDate)
-		{
-			if (ticker % 4 >= 2)
-			{
-				return $"Ende: {lecture.End.LocalDateTime:t}";
-			}
-			else
-			{
-				return $"noch {(lecture.End.LocalDateTime - compareDate).Humanize(precision: 2, minUnit: TimeUnit.Second)}";
-			}
-		}
+        string ParseRunningLecture(Lecture lecture, DateTimeOffset compareDate) => ticker % 4 >= 2
+            ? $"Ende: {lecture.End.LocalDateTime:t}"
+            : $"noch {(lecture.End.LocalDateTime - compareDate).Humanize(precision: 2, minUnit: TimeUnit.Second)}";
 
-		string ParseUpcomingLecture(Lecture lecture, DateTimeOffset compareDate)
-		{
-			if (ticker % 4 >= 2)
-			{
-				return lecture.Start.Humanize(dateToCompareAgainst: compareDate.LocalDateTime);
-			}
-			else
-			{
-				return "Start: " + lecture.Start.ToString(lecture.Start.Date == compareDate.Date ? "t" : "g");
-			}
-		}
+        string ParseUpcomingLecture(Lecture lecture, DateTimeOffset compareDate) => ticker % 4 >= 2
+            ? lecture.Start.Humanize(dateToCompareAgainst: compareDate.LocalDateTime)
+            : "Start: " + lecture.Start.ToString(lecture.Start.Date == compareDate.Date ? "t" : "g", CultureInfo.CurrentCulture);
+    }
 
-	}
-
-	private static Icon GetLectureIcon(string name)
-	{
-		uint result = 0;
-		foreach (var c in name)
-		{
-			result *= 100;
-			result += c;
-		}
-		return LectureIcons[result % (LectureIcons.Length - 1)];
-	}
-
-	private class MainViewModel : ViewModel<MainViewModel>
-	{
-		public string CourseName { get; set => SetAndRaise(ref field, value); }
-		public string FormattedTime { get; set => SetAndRaise(ref field, value); }
-		public string ElapsedPercent { get; set => SetAndRaise(ref field, value); }
-		public string Rooms { get; set => SetAndRaise(ref field, value); }
-	}
+    internal class MainViewModel : ViewModel<MainViewModel>
+    {
+        public string CourseName { get; set => SetAndRaise(ref field, value); }
+        public string FormattedTime { get; set => SetAndRaise(ref field, value); }
+        public string ElapsedPercent { get; set => SetAndRaise(ref field, value); }
+        public string Rooms { get; set => SetAndRaise(ref field, value); }
+    }
 }

@@ -19,12 +19,22 @@ internal sealed class CalCalendarService(IOptions<CourseConfig> courseOptions) :
         return GetCalendarEvent(e => e.End > now);
     }
 
+    public async Task<Maybe<Lecture[]>> GetLecturesInAsync(DateTimeOffset start, DateTimeOffset end, int maxLectures = 10, bool hasToIncludeLectureEnd = false)
+    {
+        if (await UpdateCalendarDataAsync() is { } updateError) return updateError;
+        return _lectures
+            .Where(hasToIncludeLectureEnd
+                ? e => e.Start >= start && e.Start <= end
+                : e => e.Start >= start && e.Start <= end && e.End <= end)
+            .Take(maxLectures).ToArray();
+    }
+
     private static Lecture ToLecture(CalendarEvent entry) => new()
     {
         Name = entry.Summary?.Trim() ?? "unnamed lecture",
         Start = entry.Start!.Value,
         End = entry.End!.Value,
-        Rooms = entry.Location ?? "No room assigned"
+        Rooms = entry.Location?.Replace(" Unterrichtsraum", "") ?? "No room assigned"
     };
 
     async Task<Maybe<Lecture>> GetCalendarEvent(Func<Lecture, bool> match)

@@ -41,7 +41,8 @@ internal class ConsoleWorker(ICalendarService calendarService) : IHostedService
                             Error e => new Panel(e.Ex is { } ex
                                 ? new Rows(new Text(e.Message), ex.GetRenderable())
                                 : new Text(e.Message)
-                            ).Header("An error occured").BorderColor(Spectre.Console.Color.Red)
+                            ).Header("An error occured").BorderColor(Spectre.Console.Color.Red),
+                            _ => throw new ArgumentOutOfRangeException()
                         }; ;
                         ctx.UpdateTarget(panel);
                         _ticker++;

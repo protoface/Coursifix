@@ -3,6 +3,9 @@ using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Courser.Common.Models;
+using Courser.UI.Utils;
+using Eto.Drawing;
 using Eto.Forms;
 
 namespace Courser.UI;
@@ -20,7 +23,11 @@ internal static class Extensions
 
     extension<T>(T widget) where T : BindableWidget
     {
-        public T Bind<TBindable, TModel, TValue>(Func<T, BindableBinding<TBindable, TValue>> bind, Expression<Func<TModel, TValue>> expression) where TBindable : IBindable where TModel : ViewModel<TModel>
+#pragma warning disable IDE0060 // Remove unused parameter
+        public T Bind<TBindable, TModel, TValue>(Form<TModel> parent, Func<T, BindableBinding<TBindable, TValue>> bind,
+            Expression<Func<TModel, TValue>> expression) where TModel : ViewModel<TModel>, new()
+            where TBindable : IBindable
+#pragma warning restore IDE0060 // Remove unused parameter
         {
             bind(widget).BindDataContext(Binding.Property(expression));
             return widget;
@@ -32,9 +39,13 @@ internal static class Extensions
         public void Add(Func<Task> taskFunc) => eventHandler += (_, _) => taskFunc();
     }
 
+    extension(Lecture lecture)
+    {
+        public Icon Icon => Icons.GetLectureIcon(lecture.Name);
+    }
 }
 
-abstract class ViewModel<TModel> : INotifyPropertyChanged where TModel : ViewModel<TModel>
+internal abstract class ViewModel<TModel> : INotifyPropertyChanged where TModel : ViewModel<TModel>, new()
 {
     public event PropertyChangedEventHandler PropertyChanged;
 
@@ -47,4 +58,8 @@ abstract class ViewModel<TModel> : INotifyPropertyChanged where TModel : ViewMod
         }
     }
 
+    protected void Raise(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new(propertyName));
+    }
 }

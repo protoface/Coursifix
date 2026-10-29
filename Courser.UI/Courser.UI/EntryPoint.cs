@@ -1,7 +1,10 @@
+using System;
 using System.IO;
+using System.Runtime;
 using System.Text.Json;
 using Courser.Common;
 using Courser.Common.Models;
+using Courser.UI.Utils;
 using Eto.Forms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,15 +18,25 @@ public static class EntryPoint
     public static void Enter(Application application)
     {
         application.Theme = Themes.System;
-
+        ProfileOptimization.SetProfileRoot(Environment.CurrentDirectory);
+        ProfileOptimization.StartProfile("profile.jit");
         EnsurePreferenceFile();
 
         var config = new ConfigurationBuilder().AddJsonFile(preferenceFile, false, true).Build();
-        var services = new ServiceCollection().AddCourserServices(config).AddSingleton<MainForm>().BuildServiceProvider();
+        Services.ServiceProvider = new ServiceCollection()
+            .AddCourserServices(config)
+            .AddFormServices()
+            .BuildServiceProvider();
 
-        application.Run(services.GetRequiredService<MainForm>());
+        application.Run(Services.GetService<MainForm>());
     }
 
+    private static IServiceCollection AddFormServices(this IServiceCollection serviceCollection)
+    {
+        serviceCollection.AddSingleton<MainForm>();
+        serviceCollection.AddTransient<CalendarForm>();
+        return serviceCollection;
+    }
 
 
     private static void EnsurePreferenceFile()
