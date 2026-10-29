@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <StartProject>Courser.UI.Wpf</StartProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Eto.Forms" Version="2.13.0" />
+    <PackageReference Include="Humanizer" Version="3.0.10" />
+    <PackageReference Include="Humanizer.Core.de" Version="3.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Courser.Common\Courser.Common.csproj" />
+
+    <EmbeddedResource Include="Icons\**" />
+  </ItemGroup>
+
+</Project>

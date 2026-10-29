@@ -6,20 +6,18 @@
     <LangVersion>preview</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Humanizer" />
-    <PackageReference Include="Humanizer.Core.de" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <PackageReference Include="MoeDotKawayi.Pillar.Demystifier" />
-    <!-- <PackageReference Include="Spectre.Console" Version="0.57.2" /> -->
+    <PackageReference Include="Humanizer" Version="3.0.10" />
+    <PackageReference Include="Humanizer.Core.de" Version="3.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+    <PackageReference Include="MoeDotKawayi.Pillar.Demystifier" Version="0.4.1" />
+    <PackageReference Include="Spectre.Console" Version="0.57.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Courser.Common\Courser.Common.csproj" />
-    <ProjectReference Include="..\Spectre.Console\Spectre.Console.csproj" />
   </ItemGroup>
 
 </Project>

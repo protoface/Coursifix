@@ -4,7 +4,7 @@ namespace Courser;
 
 public static class Extensions
 {
-extension(DateTimeOffset time)
+    extension(DateTimeOffset time)
     {
         public string ToLocalShortTimeString() => time.LocalDateTime.ToShortTimeString();
     }

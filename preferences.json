@@ -1,0 +1,9 @@
+{
+  "Course": "MA-TINF26IT",
+  "UpdateInterval": "00:30:00",
+  "NotesRoot": "C:\\Users\\herdef\\OneDrive - Medi GmbH \u0026 Co. KG\\Dokumente\\notes",
+  "WlanUserName": null,
+  "WlanPassword": null,
+  "LoginUri": null,
+  "LoginRedirectUri": "http://www.msftconnecttest.com/redirect"
+}

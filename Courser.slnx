@@ -1,4 +1,10 @@
 <Solution>
+  <Folder Name="/Courser.UI/">
+    <Project Path="Courser.UI/Courser.UI.Gtk/Courser.UI.Gtk.csproj" />
+    <Project Path="Courser.UI/Courser.UI.Mac/Courser.UI.Mac.csproj" />
+    <Project Path="Courser.UI/Courser.UI.Wpf/Courser.UI.Wpf.csproj" />
+    <Project Path="Courser.UI/Courser.UI/Courser.UI.csproj" />
+  </Folder>
   <Project Path="Courser.Common/Courser.Common.csproj" />
   <Project Path="Courser/Courser.csproj" />
   <Project Path="Spectre.Console.Ansi/Spectre.Console.Ansi.csproj" />
