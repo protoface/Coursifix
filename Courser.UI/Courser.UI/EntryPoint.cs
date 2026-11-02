@@ -24,18 +24,30 @@ public static class EntryPoint
 
         var config = new ConfigurationBuilder().AddJsonFile(preferenceFile, false, true).Build();
         Services.ServiceProvider = new ServiceCollection()
-            .AddCourserServices(config)
+            .AddCourserServices(config.GetSection("Course"))
+            .AddMoodleConfig(config.GetSection("Moodle"))
             .AddFormServices()
             .BuildServiceProvider();
 
         application.Run(Services.GetService<MainForm>());
     }
 
-    private static IServiceCollection AddFormServices(this IServiceCollection serviceCollection)
+    extension(IServiceCollection serviceCollection)
     {
-        serviceCollection.AddSingleton<MainForm>();
-        serviceCollection.AddTransient<CalendarForm>();
-        return serviceCollection;
+        private IServiceCollection AddFormServices()
+        {
+            serviceCollection.AddSingleton<MainForm>();
+            serviceCollection.AddTransient<CalendarForm>();
+            serviceCollection.AddTransient<MoodleView>();
+            return serviceCollection;
+        }
+
+        private IServiceCollection AddMoodleConfig(IConfiguration config)
+        {
+            serviceCollection.AddOptions<MoodleConfig>().Bind(config);
+
+            return serviceCollection;
+        }
     }
 
 
@@ -43,7 +55,7 @@ public static class EntryPoint
     {
         if (!File.Exists(preferenceFile))
         {
-            File.WriteAllText(preferenceFile, JsonSerializer.Serialize(new CourseConfig() { Course = "MA-TINF26IT" }, new JsonSerializerOptions() { WriteIndented = true }));
+            File.WriteAllText(preferenceFile, JsonSerializer.Serialize(new { Course = new CourseConfig() { Course = "MA-TINF26IT" }, Moodle = new MoodleConfig() }, new JsonSerializerOptions() { WriteIndented = true }));
         }
     }
 }

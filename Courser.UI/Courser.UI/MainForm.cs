@@ -13,6 +13,7 @@ using System.Globalization;
 using System.Net.Http;
 using System.Reflection;
 using System.Linq;
+using System.Net.NetworkInformation;
 using Courser.UI.Utils;
 
 namespace Courser.UI;
@@ -76,7 +77,8 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
             Items =
             {
                 new CheckToolItem { Text = "On Top", Style = "darker" }.Apply(e => e.CheckedChanged += (s, _) => Topmost = ((CheckToolItem)s)!.Checked),
-                new ButtonToolItem { Text = "Cal" }.Apply(e => e.Click += async (_, _) => await Services.GetService<CalendarForm>().ShowModalAsync(this))
+                new ButtonToolItem { Text = "Cal" }.Apply(e => e.Click += async (_, _) => await Services.GetService<CalendarForm>().ShowModalAsync(this)),
+                new ButtonToolItem { Text = "Moodle" }.Apply(e => e.Click += (_, _) => Services.GetService<MoodleView>().Show())
             },
         };
 
@@ -94,6 +96,8 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
     {
         try
         {
+            if (!await CheckLoginPage()) return;
+
             using var client = new HttpClient();
             if (!(await client.GetAsync(CourseConfig.LoginUri)).IsSuccessStatusCode)
             {
@@ -117,6 +121,14 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
         {
             MessageBox.Show(ex.ToString(), MessageBoxButtons.OK, MessageBoxType.Error);
         }
+    }
+
+    private async Task<bool> CheckLoginPage()
+    {
+        if (CourseConfig.LoginUri is null) return false;
+
+        var pingResult = await new Ping().SendPingAsync(CourseConfig.LoginUri.DnsSafeHost, 250);
+        return pingResult.Status == IPStatus.Success;
     }
 
     private async Task UpdateTask()
@@ -169,6 +181,15 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
                     });
                     break;
                 case Error error:
+                    if (await CheckLoginPage())
+                    {
+                        var result = MessageBox.Show("Anmeldeseite erkannt. Anmelden?", MessageBoxButtons.YesNo, MessageBoxType.Question);
+                        if (result != DialogResult.Yes)
+                            break;
+                        
+                        await LoginToNetwork();
+                    }
+
                     await Utils.UI.InvokeAsync(() =>
                     {
                         Model.CourseName = error.Message;
