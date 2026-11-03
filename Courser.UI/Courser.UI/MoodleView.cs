@@ -13,15 +13,41 @@ public class MoodleView : Form
     private readonly IOptions<MoodleConfig> _moodleConfig;
     private const string LoginTypeSelectPath = "/simplesaml/module.php/multiauth/discovery";
     private const string LoginPath = "/simplesaml/module.php/core/loginuserpassorg";
+
     [StringSyntax("javascript")]
-    private string LoginScript => $$"""
-                                    [
-                                        {prop: 'username', value: '{{UserConfig.WlanUserName}}'},
-                                        {prop: 'password', value: '{{UserConfig.WlanPassword}}'},
-                                        {prop: 'organization', value: '{{MoodleConfig.Organization}}'}
-                                    ].map(e => document.getElementById(e.prop).value = e.value);
-                                    document.getElementById('submit_button').click();
-                                    """;
+    private const string LoginStyleScript = """
+                                            document.body.style.backgroundColor = "black";
+                                            document.body.style.color = "white";
+                                            document.getElementById("header").style.background = "black";
+                                            document.querySelector("#header #logo img").style.background = "transparent";
+                                            document.querySelector(".pure-form select").style.background = "black";
+                                            document.querySelector(".pure-form select").style.color = "white";
+                                            """;
+    [StringSyntax("javascript")]
+    private const string LoginSelectScript = $"""
+                                              {LoginStyleScript}
+                                              document.getElementById('button-Student').click();
+                                              """;
+
+    [StringSyntax("javascript")]
+    private string LoginAutofillScript => $$"""
+                                            {{LoginStyleScript}}
+                                            [
+                                                {prop: 'username', value: '{{UserConfig.WlanUserName}}'},
+                                                {prop: 'password', value: '{{UserConfig.WlanPassword}}'},
+                                                {prop: 'organization', value: '{{MoodleConfig.Organization}}'}
+                                            ].map(e => document.getElementById(e.prop).value = e.value);
+                                            if(document.getElementsByClassName('message-box error').length === 0) {
+                                                document.getElementById('submit_button').click();
+                                            }
+                                            """;
+
+    [StringSyntax("javascript")]
+    private const string CssInjectScriptFormat = """
+                                                 const node = document.createElement("style");
+                                                 node.innerText = `{0}`;
+                                                 document.head.appendChild(node);
+                                                 """;
 
     private static string DarkCss()
     {
@@ -30,12 +56,8 @@ public class MoodleView : Form
         return reader.ReadToEnd();
     }
 
-    [StringSyntax("javascript")]
-    private static string CssInjectScript => field ??= $"""
-                                                        const node = document.createElement("style");
-                                                        node.innerText = `{DarkCss()}`;
-                                                        document.head.appendChild(node);
-                                                        """;
+    private static string StyleInjectScript => field ??= string.Format(CssInjectScriptFormat, DarkCss());
+
 
     private WebView _webView;
 
@@ -63,19 +85,12 @@ public class MoodleView : Form
             if (e.Uri.Host != MoodleConfig.MoodleHost) // Don't do anything if we're not in moodle
                 return;
 
-            switch (e.Uri.AbsolutePath)
+            await _webView.ExecuteScriptAsync(e.Uri.AbsolutePath switch
             {
-                case LoginTypeSelectPath:
-                    await _webView.ExecuteScriptAsync("document.getElementById('button-Student').click()");
-                    break;
-                case LoginPath:
-                    await _webView.ExecuteScriptAsync(LoginScript);
-                    break;
-                default:
-                    await _webView.ExecuteScriptAsync(CssInjectScript);
-                    break;
-            }
-
+                LoginTypeSelectPath => LoginSelectScript,
+                LoginPath => LoginAutofillScript,
+                _ => StyleInjectScript
+            });
         };
         _webView.DocumentTitleChanged += (_, e) => { Utils.UI.Invoke(() => Title = e.Title); };
     }

@@ -11,8 +11,6 @@ using System.IO;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
-using System.Reflection;
-using System.Linq;
 using System.Net.NetworkInformation;
 using Courser.UI.Utils;
 
@@ -23,16 +21,15 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
     private ICalendarService CalendarService { get; }
     private CourseConfig CourseConfig { get; }
     private Task DataUpdateTask { get; }
-    // private MainViewModel Model { get; }
+
 
     public MainForm(ICalendarService calendarService, IOptions<CourseConfig> options)
     {
         CalendarService = calendarService;
         CourseConfig = options.Value;
 
-        // DataContext = Model = new();
         Title = "Courser";
-        MinimumSize = new Size(250, 150);
+        MinimumSize = new(250, 150);
 
         DynamicLayout layout = new() { Padding = new(10, 5, 10, 0) };
         layout.Add(null);
@@ -92,11 +89,11 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
 
 
 
-    async Task LoginToNetwork()
+    async Task LoginToNetwork(bool skipCheck = false)
     {
         try
         {
-            if (!await CheckLoginPage()) return;
+            if (!skipCheck && !await CheckLoginPage()) return;
 
             using var client = new HttpClient();
             if (!(await client.GetAsync(CourseConfig.LoginUri)).IsSuccessStatusCode)
@@ -128,7 +125,7 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
         if (CourseConfig.LoginUri is null) return false;
 
         var pingResult = await new Ping().SendPingAsync(CourseConfig.LoginUri.DnsSafeHost, 250);
-        return pingResult.Status == IPStatus.Success;
+        return pingResult.Status is IPStatus.TimedOut or IPStatus.Success;
     }
 
     private async Task UpdateTask()
@@ -154,7 +151,7 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
                         await Utils.UI.InvokeAsync(() =>
                         {
                             Model.ElapsedPercent = $"{100 * elapsedLecturePercent:F2}%";
-                            Taskbar.SetProgress(TaskbarProgressState.Progress, (float)elapsedLecturePercent);
+                            Model.TaskbarProgressState = (int)(elapsedLecturePercent * 100);
                         });
                     }
                     else
@@ -168,7 +165,7 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
                         await Utils.UI.InvokeAsync(() =>
                         {
                             Model.ElapsedPercent = "";
-                            Taskbar.SetProgress(TaskbarProgressState.None);
+                            Model.TaskbarProgressState = 0;
                         });
                     }
 
@@ -183,11 +180,15 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
                 case Error error:
                     if (await CheckLoginPage())
                     {
-                        var result = MessageBox.Show("Anmeldeseite erkannt. Anmelden?", MessageBoxButtons.YesNo, MessageBoxType.Question);
-                        if (result != DialogResult.Yes)
-                            break;
-                        
-                        await LoginToNetwork();
+                        await Utils.UI.InvokeAsync(async () =>
+                        {
+                            var result = await Utils.UI.GetAsync(() => MessageBox.Show("Anmeldeseite erkannt. Anmelden?", MessageBoxButtons.YesNo, MessageBoxType.Question));
+                            if (result != DialogResult.Yes)
+                                return;
+
+                            await LoginToNetwork(true);
+                        });
+                        break;
                     }
 
                     await Utils.UI.InvokeAsync(() =>
@@ -228,5 +229,17 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
         public string FormattedTime { get; set => SetAndRaise(ref field, value); }
         public string ElapsedPercent { get; set => SetAndRaise(ref field, value); }
         public string Rooms { get; set => SetAndRaise(ref field, value); }
+
+        public int TaskbarProgressState
+        {
+            set
+            {
+                if (!SetAndRaise(ref field, value)) return;
+                if (value == 0)
+                    Taskbar.SetProgress(Eto.Forms.TaskbarProgressState.None);
+                else
+                    Taskbar.SetProgress(Eto.Forms.TaskbarProgressState.Progress, value / 100f);
+            }
+        }
     }
 }

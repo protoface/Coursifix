@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
@@ -49,13 +50,14 @@ internal abstract class ViewModel<TModel> : INotifyPropertyChanged where TModel 
 {
     public event PropertyChangedEventHandler PropertyChanged;
 
-    protected void SetAndRaise<T>(ref T field, T value, [CallerMemberName] string propertyName = "") where T : class
+    protected bool SetAndRaise<T>(ref T field, T value, [CallerMemberName] string propertyName = "") where T : IEquatable<T>
     {
-        if (field != value)
-        {
-            field = value;
-            PropertyChanged?.Invoke(this, new(propertyName));
-        }
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+
+        field = value;
+        PropertyChanged?.Invoke(this, new(propertyName));
+
+        return true;
     }
 
     protected void Raise(string propertyName)

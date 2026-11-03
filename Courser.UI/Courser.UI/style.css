@@ -13,6 +13,7 @@
     --color-dark-gray-900: #e3e3e3;
     --color-dark-red: #c75d6a;
     --color-deep-red: #a33d4a;
+    --color-green: #058105;
     --color-gray-100: #212529;
     --color-gray-200: #16181b;
     --color-gray-300: #343a40;
@@ -1085,7 +1086,7 @@ table.HELM_table td:last-child, table.HELM_table th:last-child {
 
 .path-mod-assign td.submissionstatussubmitted, .path-mod-assign div.submissionstatussubmitted, .path-mod-assign a:link.submissionstatussubmitted {
     color: var(--color-black);
-    background-color: #0aff0a;
+    background-color: var(--color-green);
 }
 
 .path-mod-assign td.submissionlocked, .path-mod-assign div.submissionlocked {
@@ -1100,7 +1101,7 @@ table.HELM_table td:last-child, table.HELM_table th:last-child {
 
 .path-mod-assign td.submissiongraded, .path-mod-assign div.submissiongraded {
     color: var(--color-black);
-    background-color: #0aff0a;
+    background-color: var(--color-green);
 }
 
 .path-mod-assign td.submissionnotgraded, .path-mod-assign div.submissionnotgraded {
@@ -1114,7 +1115,7 @@ table.HELM_table td:last-child, table.HELM_table th:last-child {
 
 .path-mod-assign td.earlysubmission, .path-mod-assign div.earlysubmission {
     color: var(--color-black);
-    background-color: #0aff0a;
+    background-color: var(--color-green);
 }
 
 .path-mod-assign td.gradingreminder, .path-mod-assign div.gradingreminder {
@@ -5021,7 +5022,7 @@ pre code {
 }
 
 .table-success th, .table-success td, .table-success thead th, .table-success tbody + tbody {
-    border-color: #0aff0a;
+    border-color: var(--color-green);
 }
 
 .table-hover .table-success:hover {

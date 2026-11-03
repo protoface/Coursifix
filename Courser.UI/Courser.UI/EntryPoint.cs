@@ -5,6 +5,7 @@ using System.Text.Json;
 using Courser.Common;
 using Courser.Common.Models;
 using Courser.UI.Utils;
+using Eto;
 using Eto.Forms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,10 @@ public static class EntryPoint
 
     public static void Enter(Application application)
     {
+        #if DEBUG
+        HotReloadService.Initialize();
+        #endif
+        
         application.Theme = Themes.System;
         ProfileOptimization.SetProfileRoot(Environment.CurrentDirectory);
         ProfileOptimization.StartProfile("profile.jit");
