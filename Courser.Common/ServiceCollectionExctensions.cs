@@ -14,6 +14,8 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddCourserServices(IConfiguration config)
         {
             serviceCollection.AddSingleton<ICalendarService, CalCalendarService>();
+            serviceCollection.AddTransient<INetworkLoginService, NetworkLoginService>();
+            serviceCollection.AddHttpClient();
             serviceCollection.AddOptions<CourseConfig>().Bind(config);
             return serviceCollection;
         }

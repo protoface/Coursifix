@@ -2,7 +2,7 @@ using System;
 
 namespace Courser.Common.Models;
 
-public readonly struct Lecture
+public sealed class Lecture
 {
     public required string Name { get; init; }
     public required string Rooms { get; init; }

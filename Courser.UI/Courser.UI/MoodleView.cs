@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 using Courser.Common.Models;
 using Eto.Forms;
 using Microsoft.Extensions.Options;
@@ -58,11 +60,10 @@ public class MoodleView : Form
 
     private static string StyleInjectScript => field ??= string.Format(CssInjectScriptFormat, DarkCss());
 
-
-    private WebView _webView;
-
     private CourseConfig UserConfig => _userConfig.Value;
     private MoodleConfig MoodleConfig => _moodleConfig.Value;
+
+    private TabControl _tabControl;
 
     public MoodleView(IOptions<CourseConfig> userConfig, IOptions<MoodleConfig> moodleConfig)
     {
@@ -71,27 +72,157 @@ public class MoodleView : Form
 
         MinimumSize = new(800, 600);
 
-        InitWebView();
-        Content = _webView;
+        Content = InitTabControl();
+
+        AddPage(new UriBuilder(Uri.UriSchemeHttps, moodleConfig.Value.MoodleHost) { Path = moodleConfig.Value.StartPath }.Uri);
     }
 
-    [MemberNotNull(nameof(_webView))]
-    private void InitWebView()
+    private MoodleView(MoodleView parent, WebViewTab page)
     {
-        _webView = new() { Url = new UriBuilder(Uri.UriSchemeHttps, MoodleConfig.MoodleHost) { Path = MoodleConfig.StartPath }.Uri };
+        _userConfig = parent._userConfig;
+        _moodleConfig = parent._moodleConfig;
 
-        _webView.DocumentLoaded += async (_, e) =>
+        MinimumSize = new(800, 600);
+
+        Content = InitTabControl();
+        _tabControl.Pages.Add(page);
+    }
+
+    [MemberNotNull(nameof(_tabControl))]
+    private TabControl InitTabControl()
+    {
+        _tabControl = new();
+        _tabControl.SelectedIndexChanged += (_, _) => Title = _tabControl.SelectedPage.Text;
+        return _tabControl;
+    }
+
+    private WebViewTab AddPage(Uri uri)
+    {
+        var webViewTab = new WebViewTab(this, uri);
+        _tabControl.Pages.Add(webViewTab);
+        return webViewTab;
+    }
+
+
+
+    private class WebViewTab : TabPage
+    {
+        private MoodleView Host { get; }
+        private readonly ExtendedWebView _webView;
+
+        public WebViewTab(MoodleView host, Uri uri)
+        {
+            Host = host;
+            _webView = host.InitWebView(uri);
+            _webView.DocumentTitleChanged += (_, e) =>
+            {
+                Text = e.Title;
+                if (((TabControl)Parent).SelectedPage == this)
+                {
+                    Host.Title = e.Title;
+                }
+            };
+            Content = _webView;
+            ContextMenu = new()
+            {
+                Items =
+                {
+                    DetachContextItem(),
+                    CloseContextItem(),
+                    CloseOthersContextItem(),
+                    DownloadsContextItem()
+                }
+            };
+        }
+
+        private ButtonMenuItem DetachContextItem()
+        {
+            var item = new ButtonMenuItem()
+            {
+                Text = "Detach"
+            };
+            item.Click += (_, _) => new MoodleView(Host, this).Show();
+            return item;
+        }
+
+        private ButtonMenuItem CloseContextItem()
+        {
+            var item = new ButtonMenuItem()
+            {
+                Text = "Close"
+            };
+            item.Click += (_, _) => Detach();
+            return item;
+        }
+
+        private ButtonMenuItem CloseOthersContextItem()
+        {
+            var item = new ButtonMenuItem()
+            {
+                Text = "Close others"
+            };
+            item.Click += (_, _) =>
+            {
+                var pages = ((TabControl)Parent).Pages.ToArray();
+                foreach (var page in pages)
+                {
+                    if (page != this) page.Detach();
+                }
+
+            };
+            return item;
+        }
+
+        private ButtonMenuItem DownloadsContextItem()
+        {
+            var item = new ButtonMenuItem()
+            {
+                Text = "Downloads"
+            };
+            item.Click += (_, _) => _webView.IsDownloadsDialogOpen ^= true;
+            return item;
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            if (e.Buttons is MouseButtons.Middle)
+            {
+                Detach();
+                e.Handled = true;
+            }
+            base.OnMouseUp(e);
+        }
+    }
+
+
+    private ExtendedWebView InitWebView(Uri uri)
+    {
+        ExtendedWebView webView = new() { Url = uri };
+
+        webView.DocumentLoaded += async (_, e) =>
         {
             if (e.Uri.Host != MoodleConfig.MoodleHost) // Don't do anything if we're not in moodle
                 return;
 
-            await _webView.ExecuteScriptAsync(e.Uri.AbsolutePath switch
+            await webView.ExecuteScriptAsync(e.Uri.AbsolutePath switch
             {
                 LoginTypeSelectPath => LoginSelectScript,
                 LoginPath => LoginAutofillScript,
                 _ => StyleInjectScript
             });
         };
-        _webView.DocumentTitleChanged += (_, e) => { Utils.UI.Invoke(() => Title = e.Title); };
+        // webView.DocumentTitleChanged += (_, e) => { Utils.UI.Invoke(() => Title = e.Title); };
+
+        webView.OpenNewWindow += (s, e) =>
+        {
+            if (!e.Uri.IsFile && Path.GetExtension(e.Uri.Segments.Last()) is not ({ Length: 0 } or ".php" or ".html"))
+                webView.Url = e.Uri;
+            else
+                _tabControl.SelectedPage = AddPage(e.Uri);
+
+            e.Cancel = true;
+        };
+
+        return webView;
     }
 }

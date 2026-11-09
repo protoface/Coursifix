@@ -6,6 +6,8 @@ namespace Courser.Common.Models;
 
 public readonly union Result<T>(T, Error) where T : notnull;
 public readonly union Maybe<T>(T?, Error);
+public readonly union Result(Ok, Error);
+public readonly struct Ok;
 
 static class ResultExtensions
 {
@@ -33,4 +35,6 @@ public sealed class Error
     public Exception? Ex { get; }
     public string MemberName { get; }
     public StackTrace? StackTrace { get; }
+
+    public static implicit operator Error(Exception ex) => new(ex);
 }

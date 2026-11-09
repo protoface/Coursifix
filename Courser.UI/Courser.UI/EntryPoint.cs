@@ -34,7 +34,7 @@ public static class EntryPoint
             .AddFormServices()
             .BuildServiceProvider();
 
-        application.Run(Services.GetService<MainForm>());
+        application.Run(Services.Get<MainForm>());
     }
 
     extension(IServiceCollection serviceCollection)

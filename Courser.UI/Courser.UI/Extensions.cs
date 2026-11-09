@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Courser.Common.Models;
 using Courser.UI.Utils;
 using Eto.Drawing;
@@ -13,12 +16,25 @@ namespace Courser.UI;
 
 internal static class Extensions
 {
+    private static Dictionary<Type, Delegate> updateFunctions { get; set; } = [];
+
     extension<T>(T obj)
     {
         public T Apply(Action<T> action)
         {
             action(obj);
             return obj;
+        }
+    }
+
+
+    extension<T>(T) where T : Command, new()
+    {
+        public static T NewTyped<TObj>(Action<TObj, EventArgs> handler)
+        {
+            var command = new T();
+            command.Executed += (s, e) => handler((TObj)s!, e);
+            return command;
         }
     }
 
@@ -44,24 +60,32 @@ internal static class Extensions
     {
         public Icon Icon => Icons.GetLectureIcon(lecture.Name);
     }
+
+    extension<T>(T viewModel) where T : ViewModel<T>, new()
+    {
+        public void Update(T updateModel)
+        {
+            if (!updateFunctions.TryGetValue(typeof(T), out var updateFunc))
+            {
+                ParameterExpression src = Expression.Parameter(typeof(T), "src"), dst = Expression.Parameter(typeof(T), "dst");
+                updateFunc = Expression.Lambda<Action<T, T>>(Expression.Block(typeof(T).GetProperties().Select(prop => Expression.Assign(Expression.Property(dst, prop), Expression.Property(src, prop)))), dst, src).Compile();
+                updateFunctions.Add(typeof(T), updateFunc);
+            }
+            ((Action<T, T>)updateFunc)(viewModel, updateModel);
+        }
+    }
 }
 
 internal abstract class ViewModel<TModel> : INotifyPropertyChanged where TModel : ViewModel<TModel>, new()
 {
-    public event PropertyChangedEventHandler PropertyChanged;
+    public event PropertyChangedEventHandler? PropertyChanged;
 
-    protected bool SetAndRaise<T>(ref T field, T value, [CallerMemberName] string propertyName = "") where T : IEquatable<T>
+    protected void SetAndRaise<T>(ref T field, T value, [CallerMemberName] string propertyName = "")
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        if (EqualityComparer<T>.Default.Equals(field, value)) return;
 
         field = value;
         PropertyChanged?.Invoke(this, new(propertyName));
-
-        return true;
     }
 
-    protected void Raise(string propertyName)
-    {
-        PropertyChanged?.Invoke(this, new(propertyName));
-    }
 }

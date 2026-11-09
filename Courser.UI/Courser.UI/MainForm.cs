@@ -10,8 +10,6 @@ using Microsoft.Extensions.Options;
 using System.IO;
 using System.Diagnostics;
 using System.Globalization;
-using System.Net.Http;
-using System.Net.NetworkInformation;
 using Courser.UI.Utils;
 
 namespace Courser.UI;
@@ -27,6 +25,22 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
     {
         CalendarService = calendarService;
         CourseConfig = options.Value;
+
+        Model.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(MainViewModel.TaskbarProgressState):
+                    if (Model.TaskbarProgressState == 0)
+                        Taskbar.SetProgress(TaskbarProgressState.None);
+                    else
+                        Taskbar.SetProgress(TaskbarProgressState.Progress, Model.TaskbarProgressState / 100f);
+                    break;
+                case nameof(MainViewModel.WindowIcon):
+                    Icon = Model.WindowIcon;
+                    break;
+            }
+        };
 
         Title = "Courser";
         MinimumSize = new(250, 150);
@@ -47,6 +61,25 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
         Content = layout;
         Icon = Icons.DiamondIcon;
 
+        var openInCode = OpenInCodeToolItem(calendarService);
+
+        ToolBar = new()
+        {
+            Items =
+            {
+                PinToolItem(),
+                CalendarToolItem(),
+                MoodleToolItem(),
+                NetworkLoginToolItem(),
+                openInCode
+            }
+        };
+
+        DataUpdateTask = Task.Run(UpdateTask);
+    }
+
+    private Command OpenInCodeToolItem(ICalendarService calendarService)
+    {
         var openInCode = new Command { ToolBarText = "Open in Code", Shortcut = Application.Instance.CommonModifier | Keys.O };
         openInCode.Executed += async (_, _) =>
         {
@@ -54,78 +87,46 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
             {
                 case Lecture lecture:
                     {
-                        var lectureDirectory = Path.Combine(CourseConfig.NotesRoot, lecture.Name, DateTime.Today.ToString("dd.MM.yy"));
-                        if (!Directory.Exists(lectureDirectory)) Directory.CreateDirectory(lectureDirectory);
+                        var lectureDirectory = Path.Combine(CourseConfig.NotesRoot, lecture.Name, DateTime.Today.ToString("dd.MM.yy", CultureInfo.InvariantCulture));
                         var notesFile = Path.Combine(lectureDirectory, "notes.typ");
-                        if (File.Exists(notesFile))
-                            File.WriteAllText(notesFile, """
-                                                         #import "../../style.typ": style
-                                                         #show: style
-
-                                                         """);
-                        Process.Start("code.exe", notesFile);
+                        Process.Start(@"C:\Program Files\Microsoft VS Code\Code.exe", [notesFile]);
                         break;
                     }
             }
         };
+        return openInCode;
+    }
 
-        ToolBar = new()
+    private CheckToolItem PinToolItem() => BuildToolItem<CheckToolItem>("Pin", (_, _) => { }, "darker").Apply(e => e.CheckedChanged += (_, _) => Topmost = e.Checked);
+    private ButtonToolItem CalendarToolItem() => BuildToolItem<ButtonToolItem>("Cal", (_, _) => Services.Get<CalendarForm>().ShowModalAsync(this));
+    private ButtonToolItem MoodleToolItem() => BuildToolItem<ButtonToolItem>("Moodle", (_, _) => Services.Get<MoodleView>().Show());
+
+    private ButtonToolItem? NetworkLoginToolItem() => CourseConfig is { WlanPassword: not null, WlanUserName: not null, LoginUri: not null }
+        ? BuildToolItem<ButtonToolItem>("Login", (_, _) => _ = LoginToNetwork())
+        : null;
+
+    private T BuildToolItem<T>(string text, EventHandler<EventArgs> action, string? style = null) where T : ToolItem, new()
+    {
+        var item = new T
         {
-            Items =
-            {
-                new CheckToolItem { Text = "On Top", Style = "darker" }.Apply(e => e.CheckedChanged += (s, _) => Topmost = ((CheckToolItem)s)!.Checked),
-                new ButtonToolItem { Text = "Cal" }.Apply(e => e.Click += async (_, _) => await Services.GetService<CalendarForm>().ShowModalAsync(this)),
-                new ButtonToolItem { Text = "Moodle" }.Apply(e => e.Click += (_, _) => Services.GetService<MoodleView>().Show())
-            },
+            Text = text,
+            Style = style
         };
-
-        if (CourseConfig is { WlanPassword: not null, WlanUserName: not null, LoginUri: not null })
-        {
-            ToolBar.Items.Add(new ButtonToolItem { Text = "Login" }.Apply(e => e.Click += async (_, _) => await LoginToNetwork()));
-        }
-
-        DataUpdateTask = Task.Run(UpdateTask);
+        item.Click += action;
+        return item;
     }
 
-
-
-    async Task LoginToNetwork(bool skipCheck = false)
+    private async static Task LoginToNetwork()
     {
-        try
+        switch (await Services.Get<INetworkLoginService>().Login())
         {
-            if (!skipCheck && !await CheckLoginPage()) return;
-
-            using var client = new HttpClient();
-            if (!(await client.GetAsync(CourseConfig.LoginUri)).IsSuccessStatusCode)
-            {
-                MessageBox.Show("Fetch of login page failed", MessageBoxButtons.OK, MessageBoxType.Error);
-                return;
-            }
-            var response = await client.PostAsync(CourseConfig.LoginUri, new FormUrlEncodedContent([
-                new("buttonClicked", "4"),
-                new("redirect_url", CourseConfig.LoginRedirectUri.ToString()),
-                new("err_flag", "0"),
-                new("username", CourseConfig.WlanUserName),
-                new("password", CourseConfig.WlanPassword)
-            ]));
-
-            if (response.IsSuccessStatusCode)
-                MessageBox.Show("Login returned OK", MessageBoxButtons.OK, MessageBoxType.Information);
-            else
-                MessageBox.Show($"Login failed: {response}", MessageBoxButtons.OK, MessageBoxType.Error);
+            case Ok:
+                MessageBox.Show("Login successful", MessageBoxButtons.OK);
+                break;
+            case Error error:
+                MessageBox.Show($"Login failed\n {error.Message}", MessageBoxButtons.OK, MessageBoxType.Error);
+                break;
         }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.ToString(), MessageBoxButtons.OK, MessageBoxType.Error);
-        }
-    }
-
-    private async Task<bool> CheckLoginPage()
-    {
-        if (CourseConfig.LoginUri is null) return false;
-
-        var pingResult = await new Ping().SendPingAsync(CourseConfig.LoginUri.DnsSafeHost, 250);
-        return pingResult.Status is IPStatus.TimedOut or IPStatus.Success;
     }
 
     private async Task UpdateTask()
@@ -134,80 +135,42 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
         int ticker = 0;
         do
         {
+            MainViewModel updateModel;
             switch (await CalendarService.GetNextEndingLectureAsync())
             {
                 case Lecture lecture:
 
                     var now = DateTimeOffset.UtcNow;
 
-                    string nameString, timeString;
-                    Icon icon;
-                    if ((now - lecture.Start) / (lecture.End - lecture.Start) is >= 0 and var elapsedLecturePercent)
-                    {
-                        nameString = lecture.Name;
-                        timeString = ParseRunningLecture(lecture, now);
-                        icon = lecture.Icon;
-
-                        await Utils.UI.InvokeAsync(() =>
+                    updateModel = (now - lecture.Start) / (lecture.End - lecture.Start) is >= 0 and var elapsedLecturePercent
+                        ? new()
                         {
-                            Model.ElapsedPercent = $"{100 * elapsedLecturePercent:F2}%";
-                            Model.TaskbarProgressState = (int)(elapsedLecturePercent * 100);
-                        });
-                    }
-                    else
-                    {
-                        nameString = $"Next: {lecture.Name}";
-                        timeString = ParseUpcomingLecture(lecture, now);
-                        icon = lecture.Start - now < TimeSpan.FromDays(7)
-                            ? lecture.Icon
-                            : Icons.DiamondIcon;
-
-                        await Utils.UI.InvokeAsync(() =>
+                            CourseName = lecture.Name,
+                            FormattedTime = ParseRunningLecture(lecture, now),
+                            ElapsedPercent = $"{100 * elapsedLecturePercent:F2}%",
+                            TaskbarProgressState = (int)(elapsedLecturePercent * 100),
+                            WindowIcon = lecture.Icon
+                        }
+                        : new()
                         {
-                            Model.ElapsedPercent = "";
-                            Model.TaskbarProgressState = 0;
-                        });
-                    }
+                            CourseName = $"Next: {lecture.Name}",
+                            FormattedTime = ParseUpcomingLecture(lecture, now),
+                            WindowIcon = lecture.Start.DayOfYear != now.DayOfYear
+                                ? lecture.Icon
+                                : Icons.DiamondIcon
+                        };
 
-                    await Utils.UI.InvokeAsync(() =>
-                    {
-                        Model.CourseName = nameString;
-                        Model.FormattedTime = timeString;
-                        Model.Rooms = lecture.Rooms;
-                        Icon = icon;
-                    });
+                    updateModel.Rooms = lecture.Rooms;
                     break;
                 case Error error:
-                    if (await CheckLoginPage())
-                    {
-                        await Utils.UI.InvokeAsync(async () =>
-                        {
-                            var result = await Utils.UI.GetAsync(() => MessageBox.Show("Anmeldeseite erkannt. Anmelden?", MessageBoxButtons.YesNo, MessageBoxType.Question));
-                            if (result != DialogResult.Yes)
-                                return;
-
-                            await LoginToNetwork(true);
-                        });
-                        break;
-                    }
-
-                    await Utils.UI.InvokeAsync(() =>
-                    {
-                        Model.CourseName = error.Message;
-                        Icon = Icons.ErrorIcon;
-                    });
+                    updateModel = new() { CourseName = error.Message };
                     break;
                 case null:
-                    await Utils.UI.InvokeAsync(() =>
-                    {
-                        Model.CourseName = "No lecture found";
-                        Model.FormattedTime = "";
-                        Model.ElapsedPercent = "";
-                        Model.Rooms = "";
-                        Taskbar.SetProgress(TaskbarProgressState.None);
-                    });
+                    updateModel = new() { CourseName = "No lecture found" };
                     break;
             }
+
+            await Utils.UI.InvokeAsync(() => Model.Update(updateModel));
             ticker++;
 
         } while (await timer.WaitForNextTickAsync());
@@ -225,21 +188,13 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
 
     internal class MainViewModel : ViewModel<MainViewModel>
     {
-        public string CourseName { get; set => SetAndRaise(ref field, value); }
-        public string FormattedTime { get; set => SetAndRaise(ref field, value); }
-        public string ElapsedPercent { get; set => SetAndRaise(ref field, value); }
-        public string Rooms { get; set => SetAndRaise(ref field, value); }
+        public string? CourseName { get; set => SetAndRaise(ref field, value); }
+        public string? FormattedTime { get; set => SetAndRaise(ref field, value); }
+        public string? ElapsedPercent { get; set => SetAndRaise(ref field, value); }
+        public string? Rooms { get; set => SetAndRaise(ref field, value); }
 
-        public int TaskbarProgressState
-        {
-            set
-            {
-                if (!SetAndRaise(ref field, value)) return;
-                if (value == 0)
-                    Taskbar.SetProgress(Eto.Forms.TaskbarProgressState.None);
-                else
-                    Taskbar.SetProgress(Eto.Forms.TaskbarProgressState.Progress, value / 100f);
-            }
-        }
+        public int TaskbarProgressState { get; set => SetAndRaise(ref field, value); }
+        public Icon WindowIcon { get; set => SetAndRaise(ref field, value); } = Icons.ErrorIcon;
     }
+
 }
