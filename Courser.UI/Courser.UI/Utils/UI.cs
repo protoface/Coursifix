@@ -10,5 +10,6 @@ public static class UI
     public static T Get<T>(Func<T> func) => Application.Instance.Invoke(func);
 
     public static Task InvokeAsync(Action action) => Application.Instance.InvokeAsync(action);
+    public static Task InvokeAsync(Func<Task> action) => Application.Instance.InvokeAsync(action);
     public static Task<T> GetAsync<T>(Func<T> func) => Application.Instance.InvokeAsync(func);
 }

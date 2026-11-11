@@ -18,7 +18,6 @@ internal sealed class CalendarForm : Dialog
     private ICalendarService CalendarService { get; }
 
     private readonly StackLayout _stackLayout;
-    private Task _updateTask;
 
     public CalendarForm(ICalendarService calendarService)
     {
@@ -38,12 +37,25 @@ internal sealed class CalendarForm : Dialog
             }
         };
 
-        _updateTask = Task.Run(UpdateFunc);
+        _ = Task.Run(UpdateFunc);
     }
 
     protected override void OnOwnerChanged(EventArgs e)
     {
-        Bounds = new(Owner.Location, Size);
+        var bounds = new Rectangle(Owner.Location, Size);
+        var displayBounds = Screen.DisplayBounds;
+        if (!displayBounds.Contains(bounds))
+        {
+            if (bounds.Bottom > displayBounds.Bottom)
+                bounds.Offset(0, -(int)(bounds.Bottom - displayBounds.Bottom));
+            else if (bounds.Top < displayBounds.Top)
+                bounds.Offset(0, (int)(displayBounds.Top - bounds.Top));
+            if (bounds.Right > displayBounds.Right)
+                bounds.Offset(-(int)(bounds.Right - displayBounds.Right), 0);
+            else if (bounds.Left < displayBounds.Left)
+                bounds.Offset((int)(displayBounds.Left - bounds.Left), 0);
+        }
+        Bounds = bounds;
         base.OnOwnerChanged(e);
     }
 

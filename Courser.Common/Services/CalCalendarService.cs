@@ -45,7 +45,7 @@ internal sealed class CalCalendarService(IOptions<CourseConfig> courseOptions) :
 
     async Task<Error?> UpdateCalendarDataAsync()
     {
-        if (Stopwatch.GetElapsedTime(_lastCalendarUpdate) < CourseConfig.UpdateInterval) return null;
+        if (_lastCalendarUpdate != 0 && Stopwatch.GetElapsedTime(_lastCalendarUpdate) < CourseConfig.UpdateInterval) return null;
         using var client = new HttpClient();
 
         switch (await GetICalStream())
