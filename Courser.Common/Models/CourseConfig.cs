@@ -6,7 +6,7 @@ public class CourseConfig
 
     public TimeSpan UpdateInterval { get; set; } = TimeSpan.FromMinutes(30);
 
-    public string NotesRoot { get; set; } = @"C:\Users\herdef\OneDrive - Medi GmbH & Co. KG\Dokumente\notes";
+    public string? NotesRoot { get; set; }
 
     public string? WlanUserName { get; set; }
 

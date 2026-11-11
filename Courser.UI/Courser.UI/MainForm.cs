@@ -60,9 +60,7 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
 
         Content = layout;
         Icon = Icons.DiamondIcon;
-
-        var openInCode = OpenInCodeToolItem(calendarService);
-
+        
         ToolBar = new()
         {
             Items =
@@ -71,15 +69,20 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
                 CalendarToolItem(),
                 MoodleToolItem(),
                 NetworkLoginToolItem(),
-                openInCode
             }
         };
+        
+        if (OpenInCodeToolItem(calendarService) is {} openInCode)
+            ToolBar.Items.Add(openInCode);
 
         DataUpdateTask = Task.Run(UpdateTask);
     }
 
-    private Command OpenInCodeToolItem(ICalendarService calendarService)
+    private Command? OpenInCodeToolItem(ICalendarService calendarService)
     {
+        if (CourseConfig.NotesRoot is null)
+            return null;
+
         var openInCode = new Command { ToolBarText = "Open in Code", Shortcut = Application.Instance.CommonModifier | Keys.O };
         openInCode.Executed += async (_, _) =>
         {
