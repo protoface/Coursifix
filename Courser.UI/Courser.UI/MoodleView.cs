@@ -62,6 +62,7 @@ public class MoodleView : Form
 
     private CourseConfig UserConfig => _userConfig.Value;
     private MoodleConfig MoodleConfig => _moodleConfig.Value;
+    private Uri MoodleStartUri => new UriBuilder(Uri.UriSchemeHttps, MoodleConfig.MoodleHost) { Path = MoodleConfig.StartPath }.Uri;
 
     private TabControl _tabControl;
 
@@ -74,7 +75,7 @@ public class MoodleView : Form
 
         Content = InitTabControl();
 
-        AddPage(new UriBuilder(Uri.UriSchemeHttps, moodleConfig.Value.MoodleHost) { Path = moodleConfig.Value.StartPath }.Uri);
+        AddPage(MoodleStartUri);
     }
 
     private MoodleView(MoodleView parent, WebViewTab page)
@@ -91,7 +92,17 @@ public class MoodleView : Form
     [MemberNotNull(nameof(_tabControl))]
     private TabControl InitTabControl()
     {
-        _tabControl = new();
+        _tabControl = new()
+        {
+            ContextMenu = new()
+            {
+                Items =
+                {
+                    new CheckMenuItem((s, _) => Topmost = ((CheckMenuItem)s!).Checked) { Text = "Pin" },
+                    new ButtonMenuItem((_, _) => _tabControl!.SelectedPage = AddPage(MoodleStartUri)) { Text = "New tab" }
+                }
+            }
+        };
         _tabControl.SelectedIndexChanged += (_, _) => Title = _tabControl.SelectedPage.Text;
         return _tabControl;
     }
@@ -197,7 +208,7 @@ public class MoodleView : Form
 
     private ExtendedWebView InitWebView(Uri uri)
     {
-        ExtendedWebView webView = new() { Url = uri };
+        ExtendedWebView webView = new() { Url = uri, TabStop = false };
 
         webView.DocumentLoaded += async (_, e) =>
         {
