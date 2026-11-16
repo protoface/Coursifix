@@ -104,9 +104,9 @@ internal sealed class MainForm : Form<MainForm.MainViewModel>
     private ButtonToolItem CalendarToolItem() => BuildToolItem<ButtonToolItem>("Cal", (_, _) => Services.Get<CalendarForm>().ShowModalAsync(this));
     private ButtonToolItem MoodleToolItem() => BuildToolItem<ButtonToolItem>("Moodle", (_, _) => Services.Get<MoodleView>().Show());
 
-    private ButtonToolItem? NetworkLoginToolItem() => CourseConfig is { WlanPassword: not null, WlanUserName: not null, LoginUri: not null }
-        ? BuildToolItem<ButtonToolItem>("Login", (_, _) => _ = LoginToNetwork())
-        : null;
+    private ButtonToolItem? NetworkLoginToolItem() =>
+        BuildToolItem<ButtonToolItem>("Login", (_, _) => _ = LoginToNetwork())
+            .Apply(e => e.Enabled = CourseConfig is { WlanPassword: not null, WlanUserName: not null, LoginUri: not null });
 
     private T BuildToolItem<T>(string text, EventHandler<EventArgs> action, string? style = null) where T : ToolItem, new()
     {
