@@ -210,7 +210,7 @@ public class MoodleView : Form
     {
         ExtendedWebView webView = new() { Url = uri, TabStop = false };
 
-        webView.DocumentLoaded += async (_, e) =>
+        webView.DocumentLoading += async (_, e) =>
         {
             if (e.Uri.Host != MoodleConfig.MoodleHost) // Don't do anything if we're not in moodle
                 return;
