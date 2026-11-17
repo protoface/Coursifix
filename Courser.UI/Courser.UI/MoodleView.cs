@@ -2,7 +2,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices.ComTypes;
 using Courser.Common.Models;
 using Eto.Forms;
 using Microsoft.Extensions.Options;
@@ -27,12 +26,15 @@ public class MoodleView : Form
                                             """;
     [StringSyntax("javascript")]
     private const string LoginSelectScript = $"""
+                                              if(window.courserSelected === true) return;
                                               {LoginStyleScript}
                                               document.getElementById('button-Student').click();
+                                              window.courserSelected = true;
                                               """;
 
     [StringSyntax("javascript")]
     private string LoginAutofillScript => $$"""
+                                            if(window.courserLogin === true) return;
                                             {{LoginStyleScript}}
                                             [
                                                 {prop: 'username', value: '{{UserConfig.WlanUserName}}'},
@@ -42,14 +44,17 @@ public class MoodleView : Form
                                             if(document.getElementsByClassName('message-box error').length === 0) {
                                                 document.getElementById('submit_button').click();
                                             }
+                                            window.courserLogin = true;
                                             """;
 
     [StringSyntax("javascript")]
-    private const string CssInjectScriptFormat = """
-                                                 const node = document.createElement("style");
-                                                 node.innerText = `{0}`;
-                                                 document.head.appendChild(node);
-                                                 """;
+    private static readonly string CssInjectScript = $"""
+                                                      if(window.styleInjected === true) return;
+                                                      const node = document.createElement("style");
+                                                      node.innerText = `{DarkCss()}`;
+                                                      document.head.appendChild(node);
+                                                      window.styleInjected = true;
+                                                      """;
 
     private static string DarkCss()
     {
@@ -57,8 +62,6 @@ public class MoodleView : Form
         using var reader = new StreamReader(stream!);
         return reader.ReadToEnd();
     }
-
-    private static string StyleInjectScript => field ??= string.Format(CssInjectScriptFormat, DarkCss());
 
     private CourseConfig UserConfig => _userConfig.Value;
     private MoodleConfig MoodleConfig => _moodleConfig.Value;
@@ -219,12 +222,24 @@ public class MoodleView : Form
             {
                 LoginTypeSelectPath => LoginSelectScript,
                 LoginPath => LoginAutofillScript,
-                _ => StyleInjectScript
+                _ => CssInjectScript
             });
         };
-        // webView.DocumentTitleChanged += (_, e) => { Utils.UI.Invoke(() => Title = e.Title); };
 
-        webView.OpenNewWindow += (s, e) =>
+        webView.DocumentLoaded += async (_, e) =>
+        {
+            if (e.Uri.Host != MoodleConfig.MoodleHost) // Don't do anything if we're not in moodle
+                return;
+
+            await webView.ExecuteScriptAsync(e.Uri.AbsolutePath switch
+            {
+                LoginTypeSelectPath => LoginSelectScript,
+                LoginPath => LoginAutofillScript,
+                _ => CssInjectScript
+            });
+        };
+
+        webView.OpenNewWindow += (_, e) =>
         {
             if (!e.Uri.IsFile && Path.GetExtension(e.Uri.Segments.Last()) is not ({ Length: 0 } or ".php" or ".html"))
                 webView.Url = e.Uri;
