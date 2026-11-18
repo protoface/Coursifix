@@ -1,0 +1,20 @@
+workflow: GitHubFlow/v1
+calculation:
+  strategies: MainLine
+  branches:
+    main:
+      increment: Minor
+      is-release-branch: true
+    develop:
+      regex: develop
+      label: 'beta'
+      increment: Minor
+      source-branches: [main]
+    feature:
+      increment: Patch
+      regex: "^feat(ures?)?[\\/-](?<BranchName>.+)"
+      source-branches: [main, develop]
+
+output: 
+  update-build-number: true
+  assembly-informational-format: "{FullSemVer}+{ShortSha}"
