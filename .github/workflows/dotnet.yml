@@ -38,6 +38,7 @@ jobs:
     - name: publish
       run: dotnet publish ./Courser.UI/Courser.UI.WPF/Courser.UI.WPF.csproj
     - name: Upload artifacts
+      if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop' }}
       uses: actions/upload-artifact@v7
       with:
         name: win-wpf
